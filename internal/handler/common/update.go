@@ -41,16 +41,16 @@ func UpdateDocument(command string, doc, update *types.Document) (bool, error) {
 	var changed bool
 	var err error
 
-	if update.Len() == 0 {
-		// replace to empty doc
-		for _, key := range doc.Keys() {
-			changed = true
+	replacement, err := isReplacementDoc(update)
+	if err != nil {
+		return false, err
+	}
 
-			if key != "_id" {
-				doc.Remove(key)
-			}
+	if replacement {
+		err = processReplacementDoc(doc, update)
+		if err != nil {
+			return false, err
 		}
-
 		return changed, nil
 	}
 
@@ -172,25 +172,54 @@ func UpdateDocument(command string, doc, update *types.Document) (bool, error) {
 				)
 			}
 
-			// Treats the update as a Replacement object.
-			setDoc := update
-
-			for _, setKey := range doc.Keys() {
-				if !setDoc.Has(setKey) && setKey != "_id" {
-					doc.Remove(setKey)
-				}
-			}
-
-			for _, setKey := range setDoc.Keys() {
-				setValue := must.NotFail(setDoc.Get(setKey))
-				doc.Set(setKey, setValue)
-			}
-
-			changed = true
+			// received a mix of non-$-prefixed fields (replacement document) and update operators
+			return false, handlererrors.NewCommandErrorMsg(
+				handlererrors.ErrDollarPrefixedFieldName,
+				"The dollar ($) prefixed field is not allowed in the context of an update's replacement document.",
+			)
 		}
 	}
 
 	return changed, nil
+}
+
+// isReplacementDoc checkes if update document qualifies to be a replacement document.
+// Returns true if either the document is empty or has no operators.
+func isReplacementDoc(update *types.Document) (bool, error) {
+	if update.Len() == 0 {
+		return true, nil
+	}
+
+	hasOperator, err := HasOperator(update)
+	if err != nil {
+		return false, err
+	}
+
+	if !hasOperator {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+// processReplacementDoc completely replaces the original document with update document while retaining the `_id` field.
+func processReplacementDoc(doc, update *types.Document) error {
+	for _, key := range doc.Keys() {
+		if key != "_id" {
+			doc.Remove(key)
+		}
+	}
+
+	for _, key := range update.Keys() {
+		if key == "_id" {
+			continue
+		}
+
+		value := must.NotFail(update.Get(key))
+		doc.Set(key, value)
+	}
+
+	return nil
 }
 
 // processSetFieldExpression changes document according to $set and $setOnInsert operators.

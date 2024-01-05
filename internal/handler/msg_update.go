@@ -178,7 +178,7 @@ func (h *Handler) updateDocument(ctx context.Context, params *common.UpdateParam
 			}
 
 			// TODO https://github.com/FerretDB/FerretDB/issues/3040
-			hasQueryOperators, err := common.HasQueryOperator(u.Filter)
+			hasQueryOperators, err := common.HasOperator(u.Filter)
 			if err != nil {
 				return 0, 0, nil, lazyerrors.Error(err)
 			}

@@ -201,7 +201,7 @@ func (h *Handler) findAndModifyDocument(ctx context.Context, params *common.Find
 			if ok {
 				var hasOp bool
 
-				if hasOp, err = common.HasQueryOperator(idDoc); err != nil {
+				if hasOp, err = common.HasOperator(idDoc); err != nil {
 					// TODO https://github.com/FerretDB/FerretDB/issues/2168
 					return nil, err
 				}
