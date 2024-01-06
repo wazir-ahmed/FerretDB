@@ -54,6 +54,8 @@ func UpdateDocument(command string, doc, update *types.Document) (bool, error) {
 		return changed, nil
 	}
 
+	origId, _ := doc.Get("_id")
+
 	for _, updateOp := range update.Keys() {
 		updateV := must.NotFail(update.Get(updateOp))
 
@@ -190,6 +192,10 @@ func UpdateDocument(command string, doc, update *types.Document) (bool, error) {
 		}
 	}
 
+	if err = validateDocIdAfterUpdate(command, origId, doc); err != nil {
+		return false, err
+	}
+
 	return changed, nil
 }
 
@@ -203,9 +209,6 @@ func processSetFieldExpression(command string, doc, setDoc *types.Document, setO
 
 	for _, setKey := range setDocKeys {
 		setValue := must.NotFail(setDoc.Get(setKey))
-
-		// validate immutable _id
-		// TODO https://github.com/FerretDB/FerretDB/issues/3017
 
 		if setOnInsert {
 			// $setOnInsert do not set null and empty array value.
@@ -1222,6 +1225,23 @@ func validateCurrentDateExpression(command string, update *types.Document) error
 				fmt.Sprintf("%s is not valid type for $currentDate. Please use a boolean ('true') "+
 					"or a $type expression ({$type: 'timestamp/date'}).", handlerparams.AliasFromType(setValue),
 				),
+				command,
+			)
+		}
+	}
+
+	return nil
+}
+
+// validateDocIdAfterUpdate checkes whether _id field has been changed by update operators.
+// If changed, returns ErrImmutableField error.
+func validateDocIdAfterUpdate(command string, id any, updatedDoc *types.Document) error {
+	if id != nil {
+		updatedId, _ := updatedDoc.Get("_id")
+		if updatedId == nil || types.Compare(id, updatedId) != types.Equal {
+			return newUpdateError(
+				handlererrors.ErrImmutableField,
+				"Performing an update on the path '_id' would modify the immutable field '_id'",
 				command,
 			)
 		}
